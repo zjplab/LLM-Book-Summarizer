@@ -40,14 +40,22 @@ def setup_llm(provider, api_key, model_name, temperature=0.1, max_tokens=4000, a
     
     elif provider == "Custom AI Vendor":
         # Use OpenAI-compatible interface for custom providers
-        # Most custom providers (like DeepSeek, local models, etc.) use OpenAI-compatible APIs
-        return OpenAI(
+        # For custom providers, we need to handle model validation differently
+        actual_model = custom_model_name or model_name
+        
+        # Create OpenAI instance with a valid model first, then override the model property
+        llm = OpenAI(
             api_key=api_key,
-            model=custom_model_name or model_name,
+            model="gpt-3.5-turbo",  # Valid model for initialization
             temperature=temperature,
             max_tokens=max_tokens,
             api_base=api_base
         )
+        
+        # Override the model property to use the custom model name
+        llm.model = actual_model
+        
+        return llm
     
     else:
         raise ValueError(f"Unsupported provider: {provider}")
