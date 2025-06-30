@@ -220,7 +220,17 @@ with col1:
                         if model_provider == "Custom AI Vendor":
                             try:
                                 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-                                Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+                                # Explicitly place the embedding model on CPU.  This avoids the
+                                # notorious "Cannot copy out of meta tensor" runtime error that
+                                # can occur when PyTorch initialises the model on a meta device
+                                # and subsequently tries to move it to a real device.  For the
+                                # summariser workload the performance impact of CPU‐hosted
+                                # embeddings is negligible compared with the cost of the remote
+                                # LLM calls.
+                                Settings.embed_model = HuggingFaceEmbedding(
+                                    model_name="BAAI/bge-small-en-v1.5",
+                                    device="cpu",
+                                )
                             except ImportError:
                                 # If HuggingFace embeddings not available, continue without setting embed_model
                                 pass
