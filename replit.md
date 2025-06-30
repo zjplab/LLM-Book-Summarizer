@@ -23,7 +23,8 @@ This is a Streamlit-based PDF Chapter Summarizer application that uses advanced 
 ### Language Model Support
 - **OpenAI**: GPT-4o model (latest as of May 13, 2024)
 - **Anthropic**: Claude Sonnet 4 (claude-sonnet-4-20250514) as the preferred latest model
-- **Configuration**: Temperature set to 0.1 for consistent summaries, 4000 max tokens
+- **Custom AI Vendor**: Support for custom API endpoints including OpenRouter, DeepSeek, and other OpenAI-compatible services
+- **Configuration**: Adjustable temperature (0.0-1.0), 4000 max tokens, custom model names and API hosts
 
 ## Key Components
 

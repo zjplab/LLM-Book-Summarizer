@@ -200,6 +200,7 @@ with col1:
             if not api_key:
                 st.error("❌ Please provide an API key in the sidebar")
             else:
+                tmp_file_path = None
                 try:
                     # Setup LLM
                     with st.spinner("🔧 Setting up AI model..."):
@@ -242,14 +243,8 @@ with col1:
                         status_text.text(f"📝 Summarizing: {chapter_title}")
                         progress_bar.progress((i + 1) / len(documents))
                         
-                        # Create a prompt template for summarization
-                        summary_prompt = PromptTemplate(summarization_prompt)
-                        
-                        # Create TreeSummarize response synthesizer with proper prompt template
-                        response_synthesizer = TreeSummarize(
-                            llm=llm,
-                            summary_template=summary_prompt
-                        )
+                        # Create TreeSummarize response synthesizer
+                        response_synthesizer = TreeSummarize(llm=llm)
                         
                         # Create query engine using the document summary index
                         query_engine = st.session_state.document_index.as_query_engine(
@@ -274,7 +269,7 @@ with col1:
                     
                 except Exception as e:
                     st.error(f"❌ Error processing PDF: {str(e)}")
-                    if 'tmp_file_path' in locals():
+                    if tmp_file_path is not None and os.path.exists(tmp_file_path):
                         try:
                             os.unlink(tmp_file_path)
                         except:
