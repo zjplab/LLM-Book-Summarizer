@@ -39,23 +39,35 @@ def setup_llm(provider, api_key, model_name, temperature=0.1, max_tokens=4000, a
         )
     
     elif provider == "Custom AI Vendor":
-        # Use OpenAI-compatible interface for custom providers
-        # For custom providers, we need to handle model validation differently
+        # For custom providers, create a subclass that bypasses model validation
         actual_model = custom_model_name or model_name
         
-        # Create OpenAI instance with a valid model first, then override the model property
-        llm = OpenAI(
+        class CustomProviderLLM(OpenAI):
+            def __init__(self, *args, **kwargs):
+                # Store the actual model name before initialization
+                self._actual_model = kwargs.get('model', 'gpt-3.5-turbo')
+                # Use a valid model name for parent initialization
+                kwargs['model'] = 'gpt-3.5-turbo'
+                super().__init__(*args, **kwargs)
+            
+            @property
+            def model(self):
+                return self._actual_model
+            
+            @model.setter
+            def model(self, value):
+                self._actual_model = value
+            
+            def _get_model_name(self):
+                return self._actual_model
+        
+        return CustomProviderLLM(
             api_key=api_key,
-            model="gpt-3.5-turbo",  # Valid model for initialization
+            model=actual_model,
             temperature=temperature,
             max_tokens=max_tokens,
             api_base=api_base
         )
-        
-        # Override the model property to use the custom model name
-        llm.model = actual_model
-        
-        return llm
     
     else:
         raise ValueError(f"Unsupported provider: {provider}")
