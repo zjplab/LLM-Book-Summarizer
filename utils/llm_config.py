@@ -2,14 +2,18 @@ import os
 from llama_index.llms.openai import OpenAI
 from llama_index.llms.anthropic import Anthropic
 
-def setup_llm(provider, api_key, model_name):
+def setup_llm(provider, api_key, model_name, temperature=0.1, max_tokens=4000, api_base=None, custom_model_name=None):
     """
     Setup and return the appropriate LLM based on provider and model selection.
     
     Args:
-        provider (str): Either "OpenAI" or "Anthropic"
+        provider (str): "OpenAI", "Anthropic", or "Custom AI Vendor"
         api_key (str): API key for the selected provider
         model_name (str): Model name to use
+        temperature (float): Temperature for response generation
+        max_tokens (int): Maximum tokens for response
+        api_base (str): Custom API base URL for custom providers
+        custom_model_name (str): Custom model name for custom providers
     
     Returns:
         LLM instance configured for the selected provider
@@ -20,8 +24,8 @@ def setup_llm(provider, api_key, model_name):
         return OpenAI(
             api_key=api_key,
             model=model_name,
-            temperature=0.1,  # Lower temperature for more consistent summaries
-            max_tokens=4000   # Adequate tokens for detailed summaries
+            temperature=temperature,
+            max_tokens=max_tokens
         )
     
     elif provider == "Anthropic":
@@ -30,8 +34,19 @@ def setup_llm(provider, api_key, model_name):
         return Anthropic(
             api_key=api_key,
             model=model_name,
-            temperature=0.1,  # Lower temperature for more consistent summaries
-            max_tokens=4000   # Adequate tokens for detailed summaries
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+    
+    elif provider == "Custom AI Vendor":
+        # Use OpenAI-compatible interface for custom providers
+        # Most custom providers (like DeepSeek, local models, etc.) use OpenAI-compatible APIs
+        return OpenAI(
+            api_key=api_key,
+            model=custom_model_name or model_name,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            api_base=api_base
         )
     
     else:
@@ -42,7 +57,7 @@ def validate_api_key(provider, api_key):
     Validate if the provided API key is properly formatted.
     
     Args:
-        provider (str): Either "OpenAI" or "Anthropic"
+        provider (str): "OpenAI", "Anthropic", or "Custom AI Vendor"
         api_key (str): API key to validate
     
     Returns:
@@ -55,5 +70,27 @@ def validate_api_key(provider, api_key):
         return api_key.startswith("sk-") and len(api_key) > 20
     elif provider == "Anthropic":
         return api_key.startswith("sk-ant-") and len(api_key) > 30
+    elif provider == "Custom AI Vendor":
+        # For custom providers, just check that it's not empty
+        return len(api_key.strip()) > 5
     
     return False
+
+def get_default_models(provider):
+    """
+    Get default model options for each provider.
+    
+    Args:
+        provider (str): Provider name
+    
+    Returns:
+        list: List of default model names
+    """
+    if provider == "OpenAI":
+        return ["gpt-4o", "gpt-4", "gpt-3.5-turbo"]
+    elif provider == "Anthropic":
+        return ["claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022"]
+    elif provider == "Custom AI Vendor":
+        return ["custom-model", "deepseek/deepseek-r1-0528:free", "gpt-4o-mini", "claude-3-haiku"]
+    else:
+        return []

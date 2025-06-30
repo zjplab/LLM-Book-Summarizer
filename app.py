@@ -4,9 +4,9 @@ import tempfile
 from io import BytesIO
 from llama_index.core import Settings
 from llama_index.core.indices import DocumentSummaryIndex
-from llama_index.core.retrievers import SummaryIndexRetriever
 from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.response_synthesizers import TreeSummarize
+from llama_index.core.prompts import PromptTemplate
 from llama_index.readers.file import PDFReader
 from utils.llm_config import setup_llm
 from utils.pdf_processor import process_pdf_with_chapters
@@ -39,7 +39,7 @@ with st.sidebar:
     # Model selection
     model_provider = st.selectbox(
         "AI Model Provider",
-        ["OpenAI", "Anthropic"],
+        ["OpenAI", "Anthropic", "Custom AI Vendor"],
         help="Choose your preferred AI model provider"
     )
     
@@ -56,7 +56,12 @@ with st.sidebar:
             ["gpt-4o", "gpt-4", "gpt-3.5-turbo"],
             help="Select the OpenAI model to use"
         )
-    else:  # Anthropic
+        # Initialize custom fields as None for non-custom providers
+        api_base = None
+        custom_model_name = None
+        temperature = 0.1  # Default temperature
+        
+    elif model_provider == "Anthropic":
         api_key = st.text_input(
             "Anthropic API Key",
             type="password",
@@ -68,6 +73,56 @@ with st.sidebar:
             ["claude-sonnet-4-20250514", "claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022"],
             help="Select the Anthropic model to use"
         )
+        # Initialize custom fields as None for non-custom providers
+        api_base = None
+        custom_model_name = None
+        temperature = 0.1  # Default temperature
+        
+    else:  # Custom AI Vendor
+        api_key = st.text_input(
+            "API Key",
+            type="password",
+            help="Enter your API key for the custom provider"
+        )
+        
+        # Advanced Configuration for Custom Vendor
+        with st.expander("⚙️ Advanced Configuration (Model, Temperature, and More)", expanded=True):
+            model_type = st.selectbox(
+                "Model Type",
+                ["custom-model", "preset-model"],
+                help="Choose custom model or select from presets"
+            )
+            
+            if model_type == "custom-model":
+                custom_model_name = st.text_input(
+                    "Custom Model Name",
+                    value="deepseek/deepseek-r1-0528:free",
+                    help="Enter the exact model name (e.g., deepseek/deepseek-r1-0528:free)"
+                )
+                model_name = "custom-model"
+            else:
+                custom_model_name = None
+                model_name = st.selectbox(
+                    "Preset Model",
+                    ["gpt-4o-mini", "claude-3-haiku", "llama-3.1-8b", "mixtral-8x7b"],
+                    help="Select from common preset models"
+                )
+            
+            api_base = st.text_input(
+                "API Host",
+                value="https://openrouter.ai/api/v1",
+                help="API base URL (e.g., https://openrouter.ai/api/v1)"
+            )
+            
+            # Temperature control
+            temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.1,
+                step=0.01,
+                help="Controls randomness in responses (0.0 = deterministic, 1.0 = creative)"
+            )
     
     st.divider()
     
@@ -89,23 +144,39 @@ Keep the summary detailed but concise, focusing on the most important informatio
         help="Customize how you want each chapter to be summarized"
     )
     
-    # Advanced settings
-    with st.expander("Advanced Settings"):
-        chunk_size = st.slider(
-            "Chunk Size",
-            min_value=512,
-            max_value=4096,
-            value=1024,
-            help="Size of text chunks for processing"
-        )
-        
-        chunk_overlap = st.slider(
-            "Chunk Overlap",
-            min_value=0,
-            max_value=200,
-            value=50,
-            help="Overlap between consecutive chunks"
-        )
+    # Advanced settings - only show for non-custom providers since custom providers have their own advanced settings
+    if model_provider != "Custom AI Vendor":
+        with st.expander("Advanced Settings"):
+            # Override the default temperature with user slider for non-custom providers
+            temperature = st.slider(
+                "Temperature",
+                min_value=0.0,
+                max_value=1.0,
+                value=0.1,
+                step=0.01,
+                help="Controls randomness in responses (0.0 = deterministic, 1.0 = creative)"
+            )
+            
+            chunk_size = st.slider(
+                "Chunk Size",
+                min_value=512,
+                max_value=4096,
+                value=1024,
+                help="Size of text chunks for processing"
+            )
+            
+            chunk_overlap = st.slider(
+                "Chunk Overlap",
+                min_value=0,
+                max_value=200,
+                value=50,
+                help="Overlap between consecutive chunks"
+            )
+    else:
+        # For custom providers, set defaults for chunk settings
+        chunk_size = 1024
+        chunk_overlap = 50
+        # Temperature is already set in the custom provider section above
 
 # Main content area
 col1, col2 = st.columns([1, 2])
@@ -132,7 +203,14 @@ with col1:
                 try:
                     # Setup LLM
                     with st.spinner("🔧 Setting up AI model..."):
-                        llm = setup_llm(model_provider, api_key, model_name)
+                        llm = setup_llm(
+                            provider=model_provider, 
+                            api_key=api_key, 
+                            model_name=model_name,
+                            temperature=temperature,
+                            api_base=api_base,
+                            custom_model_name=custom_model_name
+                        )
                         Settings.llm = llm
                         Settings.chunk_size = chunk_size
                         Settings.chunk_overlap = chunk_overlap
@@ -164,21 +242,17 @@ with col1:
                         status_text.text(f"📝 Summarizing: {chapter_title}")
                         progress_bar.progress((i + 1) / len(documents))
                         
-                        # Create retriever for this specific document
-                        retriever = SummaryIndexRetriever(
-                            index=st.session_state.document_index,
-                            choice_select_prompt=summarization_prompt
-                        )
+                        # Create a prompt template for summarization
+                        summary_prompt = PromptTemplate(summarization_prompt)
                         
-                        # Create TreeSummarize response synthesizer
+                        # Create TreeSummarize response synthesizer with proper prompt template
                         response_synthesizer = TreeSummarize(
                             llm=llm,
-                            summary_template=summarization_prompt
+                            summary_template=summary_prompt
                         )
                         
-                        # Create query engine
-                        query_engine = RetrieverQueryEngine(
-                            retriever=retriever,
+                        # Create query engine using the document summary index
+                        query_engine = st.session_state.document_index.as_query_engine(
                             response_synthesizer=response_synthesizer
                         )
                         
