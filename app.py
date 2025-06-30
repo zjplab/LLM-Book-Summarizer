@@ -8,7 +8,7 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.response_synthesizers import TreeSummarize
 from llama_index.core.prompts import PromptTemplate
 from llama_index.readers.file import PDFReader
-from utils.llm_config import setup_llm
+from utils.llm_config import setup_llm, setup_embedding_model
 from utils.pdf_processor import process_pdf_with_chapters
 from utils.export_utils import export_summaries
 
@@ -215,6 +215,12 @@ with col1:
                         Settings.llm = llm
                         Settings.chunk_size = chunk_size
                         Settings.chunk_overlap = chunk_overlap
+                        
+                        # Setup local embedding model for custom providers to avoid OpenAI dependency
+                        if model_provider == "Custom AI Vendor":
+                            embed_model = setup_embedding_model()
+                            if embed_model:
+                                Settings.embed_model = embed_model
                     
                     # Save uploaded file temporarily
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:

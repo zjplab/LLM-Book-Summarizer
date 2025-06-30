@@ -5,6 +5,7 @@ description = "Add your description here"
 requires-python = ">=3.11"
 dependencies = [
     "anthropic>=0.55.0",
+    "llama-index-embeddings-huggingface>=0.5.5",
     "llama-index>=0.12.44",
     "llama-index-core>=0.12.44",
     "llama-index-llms-anthropic>=0.7.5",
