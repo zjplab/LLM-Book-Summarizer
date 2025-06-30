@@ -39,39 +39,91 @@ def setup_llm(provider, api_key, model_name, temperature=0.1, max_tokens=4000, a
         )
     
     elif provider == "Custom AI Vendor":
-        # For custom providers, we'll use a direct approach to override model validation
+        # For custom providers, set environment variable to disable validation
         actual_model = custom_model_name or model_name
         
-        # Create OpenAI instance with valid model name first
-        llm = OpenAI(
-            api_key=api_key,
-            model="gpt-3.5-turbo",  # Use valid model for initialization
-            temperature=temperature,
-            max_tokens=max_tokens,
-            api_base=api_base
-        )
+        # Temporarily disable OpenAI model validation
+        import os
+        original_env = os.environ.get('OPENAI_API_BASE')
+        os.environ['OPENAI_API_BASE'] = api_base or 'https://api.openai.com/v1'
         
-        # Monkey patch the model attribute to use our custom model
-        llm._model = actual_model
+        try:
+            # Create OpenAI instance with custom settings
+            llm = OpenAI(
+                api_key=api_key,
+                model=actual_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                api_base=api_base
+            )
+            return llm
+        except Exception as e:
+            # If model validation still fails, create a minimal custom LLM wrapper
+            from llama_index.core.llms.llm import LLM
+            from llama_index.core.llms.types import CompletionResponse, ChatMessage, MessageRole
+            import requests
+            
+            class CustomLLM(LLM):
+                def __init__(self, api_key, model, api_base, temperature=0.1, max_tokens=4000):
+                    super().__init__()
+                    self.api_key = api_key
+                    self.model = model
+                    self.api_base = api_base.rstrip('/')
+                    self.temperature = temperature
+                    self.max_tokens = max_tokens
+                
+                @property
+                def metadata(self):
+                    return {"model_name": self.model}
+                
+                def complete(self, prompt: str, **kwargs) -> CompletionResponse:
+                    # Convert to chat format for better compatibility
+                    messages = [{"role": "user", "content": prompt}]
+                    return self._call_api(messages, **kwargs)
+                
+                def chat(self, messages, **kwargs) -> CompletionResponse:
+                    chat_messages = []
+                    for msg in messages:
+                        if hasattr(msg, 'role') and hasattr(msg, 'content'):
+                            chat_messages.append({"role": msg.role.value, "content": msg.content})
+                        elif isinstance(msg, dict):
+                            chat_messages.append(msg)
+                    return self._call_api(chat_messages, **kwargs)
+                
+                def _call_api(self, messages, **kwargs):
+                    headers = {
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    }
+                    
+                    data = {
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": kwargs.get('temperature', self.temperature),
+                        "max_tokens": kwargs.get('max_tokens', self.max_tokens)
+                    }
+                    
+                    response = requests.post(
+                        f"{self.api_base}/chat/completions",
+                        headers=headers,
+                        json=data
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        content = result['choices'][0]['message']['content']
+                        return CompletionResponse(text=content)
+                    else:
+                        raise Exception(f"API call failed: {response.status_code} - {response.text}")
+            
+            return CustomLLM(api_key, actual_model, api_base, temperature, max_tokens)
         
-        # Override methods that might call model validation
-        original_complete = llm.complete
-        original_chat = llm.chat
-        
-        def patched_complete(prompt, **kwargs):
-            # Temporarily set model for the API call
-            kwargs['model'] = actual_model
-            return original_complete(prompt, **kwargs)
-        
-        def patched_chat(messages, **kwargs):
-            # Temporarily set model for the API call  
-            kwargs['model'] = actual_model
-            return original_chat(messages, **kwargs)
-        
-        llm.complete = patched_complete
-        llm.chat = patched_chat
-        
-        return llm
+        finally:
+            # Restore original environment
+            if original_env:
+                os.environ['OPENAI_API_BASE'] = original_env
+            elif 'OPENAI_API_BASE' in os.environ:
+                del os.environ['OPENAI_API_BASE']
     
     else:
         raise ValueError(f"Unsupported provider: {provider}")
