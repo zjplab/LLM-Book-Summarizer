@@ -39,35 +39,39 @@ def setup_llm(provider, api_key, model_name, temperature=0.1, max_tokens=4000, a
         )
     
     elif provider == "Custom AI Vendor":
-        # For custom providers, create a subclass that bypasses model validation
+        # For custom providers, we'll use a direct approach to override model validation
         actual_model = custom_model_name or model_name
         
-        class CustomProviderLLM(OpenAI):
-            def __init__(self, *args, **kwargs):
-                # Store the actual model name before initialization
-                self._actual_model = kwargs.get('model', 'gpt-3.5-turbo')
-                # Use a valid model name for parent initialization
-                kwargs['model'] = 'gpt-3.5-turbo'
-                super().__init__(*args, **kwargs)
-            
-            @property
-            def model(self):
-                return self._actual_model
-            
-            @model.setter
-            def model(self, value):
-                self._actual_model = value
-            
-            def _get_model_name(self):
-                return self._actual_model
-        
-        return CustomProviderLLM(
+        # Create OpenAI instance with valid model name first
+        llm = OpenAI(
             api_key=api_key,
-            model=actual_model,
+            model="gpt-3.5-turbo",  # Use valid model for initialization
             temperature=temperature,
             max_tokens=max_tokens,
             api_base=api_base
         )
+        
+        # Monkey patch the model attribute to use our custom model
+        llm._model = actual_model
+        
+        # Override methods that might call model validation
+        original_complete = llm.complete
+        original_chat = llm.chat
+        
+        def patched_complete(prompt, **kwargs):
+            # Temporarily set model for the API call
+            kwargs['model'] = actual_model
+            return original_complete(prompt, **kwargs)
+        
+        def patched_chat(messages, **kwargs):
+            # Temporarily set model for the API call  
+            kwargs['model'] = actual_model
+            return original_chat(messages, **kwargs)
+        
+        llm.complete = patched_complete
+        llm.chat = patched_chat
+        
+        return llm
     
     else:
         raise ValueError(f"Unsupported provider: {provider}")
