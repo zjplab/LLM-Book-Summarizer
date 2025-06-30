@@ -8,7 +8,7 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.response_synthesizers import TreeSummarize
 from llama_index.core.prompts import PromptTemplate
 from llama_index.readers.file import PDFReader
-from utils.llm_config import setup_llm, setup_embedding_model
+from utils.llm_config import setup_llm, setup_local_embedding
 from utils.pdf_processor import process_pdf_with_chapters
 from utils.export_utils import export_summaries
 
@@ -216,11 +216,14 @@ with col1:
                         Settings.chunk_size = chunk_size
                         Settings.chunk_overlap = chunk_overlap
                         
-                        # Setup local embedding model for custom providers to avoid OpenAI dependency
+                        # For custom providers, use HuggingFace embeddings to avoid OpenAI dependency
                         if model_provider == "Custom AI Vendor":
-                            embed_model = setup_embedding_model()
-                            if embed_model:
-                                Settings.embed_model = embed_model
+                            try:
+                                from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+                                Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
+                            except ImportError:
+                                # If HuggingFace embeddings not available, continue without setting embed_model
+                                pass
                     
                     # Save uploaded file temporarily
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:

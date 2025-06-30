@@ -52,24 +52,14 @@ def setup_llm(provider, api_key, model_name, temperature=0.1, max_tokens=4000, a
     else:
         raise ValueError(f"Unsupported provider: {provider}")
 
-def setup_embedding_model():
+def setup_local_embedding():
     """
-    Setup a local embedding model to avoid requiring OpenAI API for embeddings.
+    Setup a local embedding model to avoid OpenAI API dependency.
     
     Returns:
-        HuggingFaceEmbedding or None: Local embedding model if available
+        str: Embedding model setting for local use
     """
-    try:
-        from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-        return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-    except ImportError:
-        try:
-            # Try alternative import path
-            from llama_index.embeddings import HuggingFaceEmbedding
-            return HuggingFaceEmbedding(model_name="BAAI/bge-small-en-v1.5")
-        except ImportError:
-            # If HuggingFace embeddings aren't available, return None
-            return None
+    return "local"
 
 def validate_api_key(provider, api_key):
     """
